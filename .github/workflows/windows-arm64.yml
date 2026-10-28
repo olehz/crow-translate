@@ -73,6 +73,14 @@ jobs:
         shell: msys2 {0}
         run: bash .github/scripts/bundle-windows-arm64.sh
 
+      - name: Pack zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          # Windows tar is bsdtar: -a plus a .zip name writes a real zip archive.
+          tar.exe -a -c -f dist/crow-translate-4.1.0-windows-arm64.zip -C install/bin .
+          Get-Item dist/crow-translate-4.1.0-windows-arm64.zip
+
       - name: Upload portable zip
         uses: actions/upload-artifact@v4
         with:

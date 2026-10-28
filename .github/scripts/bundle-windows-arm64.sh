@@ -73,12 +73,4 @@ if ! command -v objdump >/dev/null 2>&1; then
 fi
 "${dumper}" -f "${bin}/crow.exe"
 "${dumper}" -f "${bin}/crow.exe" | grep -q 'aarch64'
-
-mkdir -p "${root}/dist"
-archive="${root}/dist/crow-translate-4.1.0-windows-arm64.zip"
-rm -f "${archive}"
-(
-  cd "${bin}"
-  tar -a -cf "${archive}" .
-)
-ls -lh "${archive}"
+echo "Portable directory is ready at ${bin}"
