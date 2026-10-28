@@ -5,6 +5,10 @@ on:
     branches: [windows-arm64]
   workflow_dispatch:
 
+concurrency:
+  group: windows-arm64
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-11-arm

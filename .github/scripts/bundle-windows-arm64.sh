@@ -28,41 +28,57 @@ echo "Using ${deployer}"
   "${deployer}" --release --compiler-runtime --no-translations crow.exe
 )
 
-copy_non_system_dlls() {
-  local binary="$1"
-  local dest="$2"
-  ntldd -R "${binary}" | while IFS= read -r line; do
-    local dll
+# ntldd -R can recurse forever on circular imports, so walk direct imports
+# once per binary and only pull DLLs out of the MSYS2 clangarm64 prefix.
+declare -A seen=()
+queue=()
+while IFS= read -r binary; do
+  queue+=("${binary}")
+done < <(find "${bin}" -type f \( -name '*.exe' -o -name '*.dll' \))
+
+echo "Scanning ${#queue[@]} binaries for extra DLLs"
+index=0
+copied=0
+while [[ "${index}" -lt "${#queue[@]}" ]]; do
+  binary="${queue[${index}]}"
+  index=$((index + 1))
+  base="$(basename "${binary}")"
+  if [[ -n "${seen[${base}]:-}" ]]; then
+    continue
+  fi
+  seen["${base}"]=1
+
+  while IFS= read -r line; do
     dll="$(printf '%s\n' "${line}" | sed -n 's/.*=>[[:space:]]*//p' | awk '{print $1}' | tr '\\' '/')"
     [[ -z "${dll}" || "${dll}" == "not" ]] && continue
     case "${dll}" in
       *[Ww]indows/[Ss]ystem32/*|*[Ww]indows/SYSTEM32/*) continue ;;
+      *clangarm64/bin/*) ;;
+      *) continue ;;
     esac
-    case "${dll}" in
-      *clangarm64/bin/*)
-        if [[ -f "${dll}" ]]; then
-          cp -n "${dll}" "${dest}/" || true
-        fi
-        ;;
-    esac
-  done
-}
-
-for _pass in 1 2 3 4; do
-  while IFS= read -r binary; do
-    copy_non_system_dlls "${binary}" "${bin}"
-  done < <(find "${bin}" -type f \( -name '*.exe' -o -name '*.dll' \))
+    [[ -f "${dll}" ]] || continue
+    name="$(basename "${dll}")"
+    if [[ -z "${seen[${name}]:-}" && ! -f "${bin}/${name}" ]]; then
+      cp -n "${dll}" "${bin}/"
+      queue+=("${bin}/${name}")
+      copied=$((copied + 1))
+    fi
+  done < <(ntldd "${binary}" || true)
 done
+echo "Copied ${copied} non-Qt DLLs"
 
-objdump -f "${bin}/crow.exe"
-objdump -f "${bin}/crow.exe" | grep -q 'aarch64'
+dumper="objdump"
+if ! command -v objdump >/dev/null 2>&1; then
+  dumper="llvm-objdump"
+fi
+"${dumper}" -f "${bin}/crow.exe"
+"${dumper}" -f "${bin}/crow.exe" | grep -q 'aarch64'
 
 mkdir -p "${root}/dist"
 archive="${root}/dist/crow-translate-4.1.0-windows-arm64.zip"
 rm -f "${archive}"
 (
   cd "${bin}"
-  # bsdtar writes zip archives and is available in the MSYS2 environment.
   tar -a -cf "${archive}" .
 )
 ls -lh "${archive}"
