@@ -1,0 +1,77 @@
+name: Windows ARM64
+
+on:
+  push:
+    branches: [windows-arm64]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-11-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Checkout required submodules
+        shell: pwsh
+        run: |
+          git submodule update --init --depth 1 `
+            src/3rdparty/singleapplication `
+            src/3rdparty/qhotkey `
+            data/icons/3rdparty/breeze-icons
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Setup MSYS2 CLANGARM64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANGARM64
+          update: true
+          cache: true
+          install: >-
+            mingw-w64-clang-aarch64-cc
+            mingw-w64-clang-aarch64-cmake
+            mingw-w64-clang-aarch64-ninja
+            mingw-w64-clang-aarch64-pkgconf
+            mingw-w64-clang-aarch64-extra-cmake-modules
+            mingw-w64-clang-aarch64-qt6-base
+            mingw-w64-clang-aarch64-qt6-multimedia
+            mingw-w64-clang-aarch64-qt6-speech
+            mingw-w64-clang-aarch64-qt6-svg
+            mingw-w64-clang-aarch64-qt6-scxml
+            mingw-w64-clang-aarch64-qt6-imageformats
+            mingw-w64-clang-aarch64-qt6-tools
+            mingw-w64-clang-aarch64-kiconthemes
+            mingw-w64-clang-aarch64-tesseract-ocr
+            mingw-w64-clang-aarch64-leptonica
+            mingw-w64-clang-aarch64-icoutils
+            mingw-w64-clang-aarch64-ntldd
+
+      - name: Configure and build
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          cmake -G Ninja -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="${PWD}/install" \
+            -DWITH_PIPER_TTS=OFF \
+            -DWITH_TTS=ON \
+            -DWITH_KWAYLAND=OFF \
+            -DWITH_KICONTHEMES=ON \
+            -DBUILD_TESTING=OFF \
+            -DCMAKE_CXX_STANDARD=20
+          cmake --build build
+          cmake --install build
+
+      - name: Bundle portable directory
+        shell: msys2 {0}
+        run: bash .github/scripts/bundle-windows-arm64.sh
+
+      - name: Upload portable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: crow-translate-4.1.0-windows-arm64
+          path: dist/crow-translate-4.1.0-windows-arm64.zip
+          if-no-files-found: error
