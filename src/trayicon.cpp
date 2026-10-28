@@ -12,13 +12,85 @@
 
 #include <QAction>
 #include <QCoreApplication>
+#include <QCursor>
 #include <QDesktopServices>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QLabel>
 #include <QMenu>
+#include <QPointer>
+#include <QScreen>
 #include <QSysInfo>
+#include <QTimer>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QVBoxLayout>
+#include <QWidget>
+
+#ifdef Q_OS_WIN
+namespace {
+// Windows 11 ignores the tray balloon that QSystemTrayIcon::showMessage sends,
+// so the translation would never appear. A small on-screen window does.
+QPointer<QWidget> translationToast;
+
+void presentTranslationToast(const QString &message, int timeoutMs)
+{
+    QString shown = message.trimmed();
+    if (shown.isEmpty())
+        return;
+    if (shown.size() > 1200)
+        shown = shown.left(1200) + QStringLiteral("…");
+
+    if (translationToast.isNull()) {
+        auto *toast = new QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus);
+        toast->setAttribute(Qt::WA_ShowWithoutActivating);
+        toast->setAttribute(Qt::WA_DeleteOnClose);
+        const QPalette palette = QGuiApplication::palette();
+        toast->setStyleSheet(QStringLiteral("QWidget { background: %1; color: %2; border: 1px solid %3; }"
+                                            "QLabel#toastTitle { font-weight: 600; border: none; }"
+                                            "QLabel#toastBody { border: none; }")
+                                 .arg(palette.color(QPalette::Window).name(), palette.color(QPalette::WindowText).name(), palette.color(QPalette::Mid).name()));
+
+        auto *layout = new QVBoxLayout(toast);
+        layout->setContentsMargins(14, 12, 14, 12);
+        auto *title = new QLabel(TrayIcon::tr("Translation result"), toast);
+        title->setObjectName(QStringLiteral("toastTitle"));
+        auto *body = new QLabel(toast);
+        body->setObjectName(QStringLiteral("toastBody"));
+        body->setWordWrap(true);
+        body->setFixedWidth(400);
+        body->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        layout->addWidget(title);
+        layout->addWidget(body);
+
+        auto *timer = new QTimer(toast);
+        timer->setSingleShot(true);
+        QObject::connect(timer, &QTimer::timeout, toast, &QWidget::close);
+        translationToast = toast;
+    }
+
+    auto *body = translationToast->findChild<QLabel *>(QStringLiteral("toastBody"));
+    if (body != nullptr) {
+        body->setText(shown);
+        body->setMinimumHeight(body->heightForWidth(body->width()));
+    }
+    translationToast->adjustSize();
+
+    QScreen *screen = QGuiApplication::screenAt(QCursor::pos());
+    if (screen == nullptr)
+        screen = QGuiApplication::primaryScreen();
+    if (screen != nullptr) {
+        const QRect area = screen->availableGeometry();
+        translationToast->move(area.right() - translationToast->width() - 16, area.bottom() - translationToast->height() - 16);
+    }
+
+    translationToast->show();
+    translationToast->raise();
+    if (auto *timer = translationToast->findChild<QTimer *>())
+        timer->start(qMax(1000, timeoutMs));
+}
+} // namespace
+#endif
 
 TrayIcon::TrayIcon(MainWindow *parent)
     : QSystemTrayIcon(parent)
@@ -70,7 +142,11 @@ void TrayIcon::retranslateMenu()
 
 void TrayIcon::showTranslationMessage(const QString &message)
 {
+#ifdef Q_OS_WIN
+    presentTranslationToast(message, m_translationNotificaitonTimeout * 1000);
+#else
     showMessage(tr("Translation result"), message, QSystemTrayIcon::NoIcon, m_translationNotificaitonTimeout * 1000);
+#endif
 }
 
 QIcon TrayIcon::customTrayIcon(const QString &customName)

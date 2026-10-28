@@ -817,7 +817,8 @@ void MainWindow::showTranslationWindow()
         open();
         break;
     case AppSettings::Notification:
-        qDebug() << "showTranslationWindow: notification mode, not showing window";
+        qDebug() << "showTranslationWindow: notification mode";
+        m_trayIcon->showTranslationMessage(ui->translationEdit->toPlainText());
         break;
     }
 }
