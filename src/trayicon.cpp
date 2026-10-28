@@ -15,10 +15,12 @@
 #include <QCursor>
 #include <QDesktopServices>
 #include <QFileInfo>
+#include <QHBoxLayout>
 #include <QGuiApplication>
 #include <QLabel>
 #include <QMenu>
 #include <QPointer>
+#include <QPushButton>
 #include <QScreen>
 #include <QSysInfo>
 #include <QTimer>
@@ -42,25 +44,39 @@ void presentTranslationToast(const QString &message, int timeoutMs)
         shown = shown.left(1200) + QStringLiteral("…");
 
     if (translationToast.isNull()) {
-        auto *toast = new QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus);
+        auto *toast = new QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
         toast->setAttribute(Qt::WA_ShowWithoutActivating);
         toast->setAttribute(Qt::WA_DeleteOnClose);
         const QPalette palette = QGuiApplication::palette();
         toast->setStyleSheet(QStringLiteral("QWidget { background: %1; color: %2; border: 1px solid %3; }"
                                             "QLabel#toastTitle { font-weight: 600; border: none; }"
-                                            "QLabel#toastBody { border: none; }")
-                                 .arg(palette.color(QPalette::Window).name(), palette.color(QPalette::WindowText).name(), palette.color(QPalette::Mid).name()));
+                                            "QLabel#toastBody { border: none; }"
+                                            "QPushButton#toastClose { border: none; background: transparent; font-size: 16px; padding: 0; }"
+                                            "QPushButton#toastClose:hover { background: %4; }")
+                                 .arg(palette.color(QPalette::Window).name(), palette.color(QPalette::WindowText).name(), palette.color(QPalette::Mid).name(), palette.color(QPalette::Midlight).name()));
 
         auto *layout = new QVBoxLayout(toast);
-        layout->setContentsMargins(14, 12, 14, 12);
+        layout->setContentsMargins(14, 10, 10, 12);
+        auto *header = new QHBoxLayout;
+        header->setContentsMargins(0, 0, 0, 0);
         auto *title = new QLabel(TrayIcon::tr("Translation result"), toast);
         title->setObjectName(QStringLiteral("toastTitle"));
+        auto *closeButton = new QPushButton(QStringLiteral("×"), toast);
+        closeButton->setObjectName(QStringLiteral("toastClose"));
+        closeButton->setFixedSize(24, 24);
+        closeButton->setFlat(true);
+        closeButton->setFocusPolicy(Qt::NoFocus);
+        closeButton->setCursor(Qt::PointingHandCursor);
+        closeButton->setToolTip(TrayIcon::tr("Close"));
+        QObject::connect(closeButton, &QPushButton::clicked, toast, &QWidget::close);
+        header->addWidget(title, 1);
+        header->addWidget(closeButton, 0, Qt::AlignTop);
         auto *body = new QLabel(toast);
         body->setObjectName(QStringLiteral("toastBody"));
         body->setWordWrap(true);
         body->setFixedWidth(400);
         body->setTextInteractionFlags(Qt::TextSelectableByMouse);
-        layout->addWidget(title);
+        layout->addLayout(header);
         layout->addWidget(body);
 
         auto *timer = new QTimer(toast);
